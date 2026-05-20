@@ -145,6 +145,22 @@ Enforced at two layers: UI hides controls users can't use, and every API route r
 
 ---
 
+## Entity-relationship diagram
+
+The full ERD is auto-generated from `prisma/schema.prisma`:
+
+![ERD](./docs/ERD.svg)
+
+To regenerate after a schema change:
+
+```bash
+npm run db:erd
+```
+
+The diagram is rendered by [`prisma-erd-generator`](https://github.com/keonik/prisma-erd-generator) using Mermaid. The output is committed to `docs/ERD.svg` so it's visible on GitHub and embeddable in the printed diploma document.
+
+---
+
 ## Project structure
 
 ```

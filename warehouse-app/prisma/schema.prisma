@@ -2,6 +2,18 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Auto-generated ERD. Disabled in production via DISABLE_ERD env var because
+// the Chromium download (used by Mermaid CLI) bloats Render/Vercel builds.
+// docs/ERD.svg is committed to the repo, so prod builds don't need to re-render it.
+// Locally: just run `npm run db:erd` and the SVG regenerates.
+generator erd {
+  provider                  = "prisma-erd-generator"
+  output                    = "../docs/ERD.svg"
+  theme                     = "forest"
+  includeRelationFromFields = "true"
+  disabled                  = env("DISABLE_ERD")
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
