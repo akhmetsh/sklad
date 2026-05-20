@@ -1,32 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { z } from "zod";
 import { logAudit } from "@/lib/audit";
-import { can } from "@/lib/permissions";
-import type { Role } from "@prisma/client";
+import { locationSchema } from "@/lib/validators/reference";
+import { requireSession, requirePermission, badRequest } from "@/lib/api/helpers";
 
-const schema = z.object({
-  warehouseId: z.string().min(1, "Склад обязателен"),
-  code: z.string().min(1, "Код обязателен"),
-  name: z.string().min(1, "Название обязательно"),
-  description: z.string().optional(),
-});
+export async function GET(req: NextRequest) {
+  const r = await requireSession();
+  if ("response" in r) return r.response;
+
+  const warehouseId = req.nextUrl.searchParams.get("warehouseId");
+  const locations = await db.storageLocation.findMany({
+    where: { isActive: true, ...(warehouseId ? { warehouseId } : {}) },
+    orderBy: [{ warehouse: { name: "asc" } }, { code: "asc" }],
+    include: { warehouse: { select: { id: true, name: true } } },
+  });
+  return NextResponse.json(locations);
+}
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(session.user.role as Role, "manageReferenceData")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const r = await requirePermission("manageReferenceData");
+  if ("response" in r) return r.response;
 
-  const body = await req.json();
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
+  const parsed = locationSchema.safeParse(await req.json());
+  if (!parsed.success) return badRequest(parsed.error.errors[0]?.message ?? "Invalid input", 422);
+
+  const data = {
+    warehouseId: parsed.data.warehouseId,
+    code: parsed.data.code,
+    name: parsed.data.name,
+    description: parsed.data.description || null,
+  };
 
   try {
-    const location = await db.storageLocation.create({ data: parsed.data });
-    await logAudit({ userId: session.user.id!, action: "CREATE", entityType: "StorageLocation", entityId: location.id, newValue: parsed.data });
+    const location = await db.storageLocation.create({ data });
+    await logAudit({ userId: r.session.user.id!, action: "CREATE", entityType: "StorageLocation", entityId: location.id, newValue: data });
     return NextResponse.json(location, { status: 201 });
   } catch {
-    return NextResponse.json({ error: "Код места хранения уже существует на этом складе" }, { status: 409 });
+    return badRequest("Бұл қоймада осындай кодпен орын бар", 409);
   }
 }

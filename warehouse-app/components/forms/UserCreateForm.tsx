@@ -1,79 +1,75 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { userCreateSchema, type UserCreateInput } from "@/lib/validators/user";
+import { Button } from "@/components/ui/Button";
+import { Input, Select } from "@/components/ui/Input";
+import { FormField } from "@/components/ui/FormField";
+import { useToast } from "@/components/ui/Toast";
+import { t } from "@/lib/i18n";
 
 export function UserCreateForm() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<UserCreateInput>({
+    resolver: zodResolver(userCreateSchema),
+    defaultValues: { role: "STOREKEEPER" },
+  });
 
-    const fd = new FormData(e.currentTarget);
-    const body = {
-      name: fd.get("name"),
-      email: fd.get("email"),
-      password: fd.get("password"),
-      role: fd.get("role"),
-    };
-
-    const res = await fetch("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    setLoading(false);
-
-    if (!res.ok) {
-      const err = await res.json();
-      setError(typeof err.error === "string" ? err.error : "Ошибка создания");
-      return;
+  async function onSubmit(data: UserCreateInput) {
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error(typeof body.error === "string" ? body.error : t.errors.generic);
+        return;
+      }
+      toast.success(t.users.created);
+      router.push("/users");
+      router.refresh();
+    } catch {
+      toast.error(t.errors.network);
     }
-
-    router.push("/users");
-    router.refresh();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg p-6 space-y-4 max-w-lg">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Имя *</label>
-        <input name="name" required className={inp} />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-        <input name="email" type="email" required className={inp} />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Пароль * (минимум 6 символов)</label>
-        <input name="password" type="password" required minLength={6} className={inp} />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Роль *</label>
-        <select name="role" required className={inp}>
-          <option value="STOREKEEPER">Кладовщик</option>
-          <option value="MANAGER">Менеджер</option>
-          <option value="ADMIN">Администратор</option>
-        </select>
+    <form onSubmit={handleSubmit(onSubmit)} className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 space-y-4 max-w-lg">
+      <FormField label={t.users.fields.name} required error={errors.name?.message}>
+        <Input {...register("name")} error={!!errors.name} autoFocus />
+      </FormField>
+      <FormField label={t.users.fields.email} required error={errors.email?.message}>
+        <Input type="email" {...register("email")} error={!!errors.email} autoComplete="off" />
+      </FormField>
+      <FormField label={t.users.fields.password} required hint={t.validation.minLength(6)} error={errors.password?.message}>
+        <Input type="password" {...register("password")} error={!!errors.password} autoComplete="new-password" />
+      </FormField>
+      <FormField label={t.users.fields.role} required error={errors.role?.message}>
+        <Select {...register("role")} error={!!errors.role}>
+          <option value="STOREKEEPER">{t.roles.STOREKEEPER}</option>
+          <option value="MANAGER">{t.roles.MANAGER}</option>
+          <option value="ADMIN">{t.roles.ADMIN}</option>
+        </Select>
+      </FormField>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
+        {t.users.passwordNote}
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-
-      <div className="flex gap-3 pt-2">
-        <button type="submit" disabled={loading} className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-60">
-          {loading ? "Создание..." : "Создать пользователя"}
-        </button>
-        <button type="button" onClick={() => router.back()} className="px-5 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50">
-          Отмена
-        </button>
+      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+        <Button type="button" variant="secondary" onClick={() => router.back()} disabled={isSubmitting}>
+          {t.common.cancel}
+        </Button>
+        <Button type="submit" loading={isSubmitting}>
+          {t.common.create}
+        </Button>
       </div>
     </form>
   );
 }
-
-const inp = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";

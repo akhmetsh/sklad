@@ -1,9 +1,15 @@
 import { notFound } from "next/navigation";
+import { ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
+import { getStockBalance } from "@/lib/services/stock.service";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { DocumentStatusBadge } from "@/components/ui/StatusBadge";
 import { ConfirmDocumentButton } from "@/components/documents/ConfirmDocumentButton";
+import { CancelDocumentButton } from "@/components/documents/CancelDocumentButton";
+import { PrintButton } from "@/components/documents/PrintButton";
+import { formatDate, formatDateTime, formatQuantity } from "@/lib/format";
+import { t } from "@/lib/i18n";
 
 export default async function TransferDetailPage({ params }: { params: { id: string } }) {
   await getSession();
@@ -26,47 +32,135 @@ export default async function TransferDetailPage({ params }: { params: { id: str
 
   if (!doc) notFound();
 
+  // Check availability for DRAFT docs
+  const showAvailability = doc.status === "DRAFT";
+  const availability: Record<string, number> = {};
+  if (showAvailability) {
+    for (const item of doc.items) {
+      const bal = await getStockBalance(item.productId, doc.fromWarehouseId, item.fromStorageLocationId);
+      availability[item.id] = Number(bal);
+    }
+  }
+  const allSufficient = doc.items.every((i) => availability[i.id] >= Number(i.quantity));
+
   return (
-    <div className="space-y-6 max-w-4xl">
-      <PageHeader title={`Перемещение ${doc.documentNumber}`} backHref="/documents/transfers">
-        {doc.status === "DRAFT" && (
-          <ConfirmDocumentButton docId={doc.id} type="transfer" label="Подтвердить перемещение" />
+    <div className="space-y-4 max-w-4xl">
+      <PageHeader title={`${t.documents.transfers.detailTitle} ${doc.documentNumber}`} backHref="/documents/transfers">
+        <PrintButton />
+        {doc.status !== "CANCELLED" && (
+          <CancelDocumentButton docId={doc.id} type="transfer" status={doc.status} />
+        )}
+        {doc.status === "DRAFT" && allSufficient && (
+          <ConfirmDocumentButton docId={doc.id} type="transfer" />
         )}
       </PageHeader>
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 grid grid-cols-2 gap-4 text-sm">
-        <Field label="Статус"><StatusBadge type="document" value={doc.status} /></Field>
-        <Field label="Дата">{new Date(doc.date).toLocaleDateString("ru-RU")}</Field>
-        <Field label="Откуда">{doc.fromWarehouse.name}</Field>
-        <Field label="Куда">{doc.toWarehouse.name}</Field>
-        <Field label="Создал">{doc.createdBy.name}</Field>
-        {doc.comment && <Field label="Комментарий" className="col-span-2">{doc.comment}</Field>}
+      {doc.status === "CONFIRMED" && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
+          {t.documents.transfers.confirmedMessage(doc.fromWarehouse.name, doc.toWarehouse.name)}
+        </div>
+      )}
+
+      {doc.status === "DRAFT" && !allSufficient && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+          <p className="text-sm font-medium text-red-700">{t.documents.common.insufficientStock}</p>
+          <p className="text-xs text-red-600 mt-0.5">{t.documents.common.replenishStock}</p>
+        </div>
+      )}
+
+      <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">{t.documents.common.requisites}</h2>
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          <Field label={t.common.status}><DocumentStatusBadge status={doc.status} /></Field>
+          <Field label={t.documents.common.date}>{formatDate(doc.date)}</Field>
+          <Field label={t.documents.transfers.fields.fromWarehouse}>{doc.fromWarehouse.name}</Field>
+          <Field label={t.documents.transfers.fields.toWarehouse}>{doc.toWarehouse.name}</Field>
+          <Field label={t.documents.common.createdAt}>{formatDateTime(doc.createdAt)}</Field>
+          <Field label={t.audit.columns.user}>{doc.createdBy.name}</Field>
+          {doc.comment && <Field label={t.documents.common.comment} className="sm:col-span-2">{doc.comment}</Field>}
+        </dl>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 font-medium text-sm">Позиции</div>
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Товар</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Откуда (место)</th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">Куда (место)</th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">Количество</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {doc.items.map((item) => (
-              <tr key={item.id}>
-                <td className="px-4 py-2">{item.product.name}</td>
-                <td className="px-4 py-2">{item.fromStorageLocation.name}</td>
-                <td className="px-4 py-2">{item.toStorageLocation.name}</td>
-                <td className="px-4 py-2 text-right">
-                  {item.quantity.toString()} {item.product.unit.symbol}
-                </td>
+        <div className="px-4 sm:px-6 py-3 border-b border-gray-100 bg-gray-50">
+          <h2 className="text-sm font-semibold text-gray-700">{t.documents.common.items}</h2>
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto scrollbar-thin">
+          <table className="min-w-full divide-y divide-gray-100 text-sm">
+            <thead>
+              <tr>
+                <th className="px-4 py-2.5 text-left font-medium text-gray-500">{t.documents.common.product}</th>
+                <th className="px-4 py-2.5 text-left font-medium text-gray-500">{t.documents.transfers.fields.fromLocation}</th>
+                <th className="px-4 py-2.5 text-left font-medium text-gray-500">{t.documents.transfers.fields.toLocation}</th>
+                <th className="px-4 py-2.5 text-right font-medium text-gray-500">{t.common.quantity}</th>
+                {showAvailability && <th className="px-4 py-2.5 text-right font-medium text-gray-500">{t.documents.common.available}</th>}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {doc.items.map((item) => {
+                const required = Number(item.quantity);
+                const avail = availability[item.id];
+                const insufficient = showAvailability && avail < required;
+                return (
+                  <tr key={item.id} className={insufficient ? "bg-red-50" : ""}>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-900">{item.product.name}</div>
+                      <div className="text-xs text-gray-400 font-mono">{item.product.sku}</div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      <span className="font-mono">{item.fromStorageLocation.code}</span> — {item.fromStorageLocation.name}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      <span className="font-mono">{item.toStorageLocation.code}</span> — {item.toStorageLocation.name}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums font-medium">
+                      {formatQuantity(required, item.product.unit.symbol)}
+                    </td>
+                    {showAvailability && (
+                      <td className={`px-4 py-3 text-right tabular-nums font-medium ${insufficient ? "text-red-600" : "text-green-700"}`}>
+                        {formatQuantity(avail, item.product.unit.symbol)}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile cards */}
+        <ul className="md:hidden divide-y divide-gray-100">
+          {doc.items.map((item) => {
+            const required = Number(item.quantity);
+            const avail = availability[item.id];
+            const insufficient = showAvailability && avail < required;
+            return (
+              <li key={item.id} className={`p-4 space-y-2 ${insufficient ? "bg-red-50" : ""}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-900">{item.product.name}</p>
+                    <p className="text-xs text-gray-400 font-mono">{item.product.sku}</p>
+                  </div>
+                  <span className="text-sm font-medium tabular-nums whitespace-nowrap">
+                    {formatQuantity(required, item.product.unit.symbol)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                  <span className="font-mono">{item.fromStorageLocation.code}</span>
+                  <ArrowRight className="w-3 h-3" />
+                  <span className="font-mono">{item.toStorageLocation.code}</span>
+                </div>
+                {showAvailability && (
+                  <p className={`text-xs tabular-nums ${insufficient ? "text-red-600 font-medium" : "text-green-700"}`}>
+                    {t.documents.common.available}: {formatQuantity(avail, item.product.unit.symbol)}
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </div>
   );
@@ -75,8 +169,8 @@ export default async function TransferDetailPage({ params }: { params: { id: str
 function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <div className={className}>
-      <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-      <div className="font-medium">{children}</div>
+      <dt className="text-xs text-gray-500 mb-0.5">{label}</dt>
+      <dd className="font-medium text-gray-900">{children}</dd>
     </div>
   );
 }

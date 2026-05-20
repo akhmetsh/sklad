@@ -1,9 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { productSchema, type ProductInput } from "@/lib/validators/product";
+import { Button } from "@/components/ui/Button";
+import { Input, Textarea, Select } from "@/components/ui/Input";
+import { FormField } from "@/components/ui/FormField";
+import { ImagePicker } from "@/components/ui/ImagePicker";
+import { useToast } from "@/components/ui/Toast";
+import { t } from "@/lib/i18n";
 
 interface Props {
   categories: { id: string; name: string }[];
@@ -13,6 +19,7 @@ interface Props {
     name: string;
     sku: string;
     barcode: string | null;
+    imageUrl: string | null;
     categoryId: string;
     unitId: string;
     description: string | null;
@@ -22,103 +29,100 @@ interface Props {
 
 export function ProductForm({ categories, units, product }: Props) {
   const router = useRouter();
+  const toast = useToast();
   const isEdit = !!product;
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ProductInput>({
+  const { register, handleSubmit, control, formState: { errors, isSubmitting } } = useForm<ProductInput>({
     resolver: zodResolver(productSchema),
     defaultValues: product
       ? {
           name: product.name,
           sku: product.sku,
           barcode: product.barcode ?? "",
+          imageUrl: product.imageUrl ?? "",
           categoryId: product.categoryId,
           unitId: product.unitId,
           description: product.description ?? "",
           minStock: parseFloat(product.minStock.toString()),
         }
-      : { minStock: 0 },
+      : { minStock: 0, barcode: "", imageUrl: "", description: "" },
   });
 
   async function onSubmit(data: ProductInput) {
-    const url = isEdit ? `/api/products/${product.id}` : "/api/products";
+    const url = isEdit ? `/api/products/${product!.id}` : "/api/products";
     const method = isEdit ? "PATCH" : "POST";
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      alert(err.error ?? "Ошибка сохранения");
-      return;
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error(typeof body.error === "string" ? body.error : t.errors.generic);
+        return;
+      }
+      toast.success(isEdit ? t.products.updated : t.products.created);
+      router.push("/products");
+      router.refresh();
+    } catch {
+      toast.error(t.errors.network);
     }
-
-    router.push("/products");
-    router.refresh();
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Название *" error={errors.name?.message}>
-          <input {...register("name")} className={input} />
-        </Field>
-        <Field label="Артикул (SKU) *" error={errors.sku?.message}>
-          <input {...register("sku")} className={input} />
-        </Field>
-        <Field label="Штрихкод" error={errors.barcode?.message}>
-          <input {...register("barcode")} className={input} />
-        </Field>
-        <Field label="Мин. остаток" error={errors.minStock?.message}>
-          <input type="number" step="0.001" {...register("minStock")} className={input} />
-        </Field>
-        <Field label="Категория *" error={errors.categoryId?.message}>
-          <select {...register("categoryId")} className={input}>
-            <option value="">— выберите —</option>
+    <form onSubmit={handleSubmit(onSubmit)} className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 space-y-4">
+      <FormField label={t.products.image}>
+        <Controller
+          control={control}
+          name="imageUrl"
+          render={({ field }) => (
+            <ImagePicker value={field.value ?? ""} onChange={field.onChange} />
+          )}
+        />
+      </FormField>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+        <FormField label={t.products.fields.name} required error={errors.name?.message}>
+          <Input {...register("name")} error={!!errors.name} autoFocus />
+        </FormField>
+        <FormField label={t.products.fields.sku} required error={errors.sku?.message}>
+          <Input {...register("sku")} error={!!errors.sku} className="font-mono" />
+        </FormField>
+        <FormField label={t.products.fields.category} required error={errors.categoryId?.message}>
+          <Select {...register("categoryId")} error={!!errors.categoryId}>
+            <option value="">{t.common.select}</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Единица измерения *" error={errors.unitId?.message}>
-          <select {...register("unitId")} className={input}>
-            <option value="">— выберите —</option>
+          </Select>
+        </FormField>
+        <FormField label={t.products.fields.unit} required error={errors.unitId?.message}>
+          <Select {...register("unitId")} error={!!errors.unitId}>
+            <option value="">{t.common.select}</option>
             {units.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.symbol})</option>)}
-          </select>
-        </Field>
-        <Field label="Описание" error={errors.description?.message} className="col-span-2">
-          <textarea {...register("description")} rows={3} className={input} />
-        </Field>
+          </Select>
+        </FormField>
+        <FormField label={t.products.fields.minStock} error={errors.minStock?.message}>
+          <Input type="number" step="0.001" min="0" {...register("minStock")} error={!!errors.minStock} inputMode="decimal" />
+        </FormField>
+        <FormField label={t.products.fields.barcode} error={errors.barcode?.message}>
+          <Input {...register("barcode")} error={!!errors.barcode} inputMode="numeric" />
+        </FormField>
+        <div className="sm:col-span-2">
+          <FormField label={t.products.fields.description} error={errors.description?.message}>
+            <Textarea {...register("description")} rows={3} error={!!errors.description} />
+          </FormField>
+        </div>
       </div>
 
-      <div className="flex gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-60"
-        >
-          {isSubmitting ? "Сохранение..." : isEdit ? "Сохранить" : "Создать"}
-        </button>
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="px-5 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
-        >
-          Отмена
-        </button>
+      <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2 border-t border-gray-100">
+        <Button type="button" variant="secondary" onClick={() => router.back()} disabled={isSubmitting}>
+          {t.common.cancel}
+        </Button>
+        <Button type="submit" loading={isSubmitting}>
+          {isEdit ? t.common.save : t.common.create}
+        </Button>
       </div>
     </form>
-  );
-}
-
-const input = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
-
-function Field({ label, error, children, className }: { label: string; error?: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={className}>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      {children}
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
-    </div>
   );
 }

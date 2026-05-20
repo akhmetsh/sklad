@@ -1,40 +1,58 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { productSchema } from "@/lib/validators/product";
 import { logAudit } from "@/lib/audit";
-import { can } from "@/lib/permissions";
-import type { Role } from "@prisma/client";
+import { requirePermission, badRequest, notFound } from "@/lib/api/helpers";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(session.user.role as Role, "manageReferenceData")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const r = await requirePermission("manageReferenceData");
+  if ("response" in r) return r.response;
 
-  const body = await req.json();
-  const parsed = productSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
-  }
+  const parsed = productSchema.safeParse(await req.json());
+  if (!parsed.success) return badRequest(parsed.error.errors[0]?.message ?? "Invalid input", 422);
 
   const old = await db.product.findUnique({ where: { id: params.id } });
-  if (!old) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!old) return notFound();
 
-  const product = await db.product.update({
-    where: { id: params.id },
-    data: parsed.data,
-  });
+  const data = {
+    name: parsed.data.name,
+    sku: parsed.data.sku,
+    barcode: parsed.data.barcode || null,
+    imageUrl: parsed.data.imageUrl || null,
+    categoryId: parsed.data.categoryId,
+    unitId: parsed.data.unitId,
+    description: parsed.data.description || null,
+    minStock: parsed.data.minStock,
+  };
 
-  await logAudit({
-    userId: session.user.id!,
-    action: "UPDATE",
-    entityType: "Product",
-    entityId: product.id,
-    oldValue: { name: old.name, sku: old.sku },
-    newValue: parsed.data,
-  });
+  try {
+    const product = await db.product.update({ where: { id: params.id }, data });
+    await logAudit({ userId: r.session.user.id!, action: "UPDATE", entityType: "Product", entityId: product.id, oldValue: { name: old.name, sku: old.sku }, newValue: data });
+    return NextResponse.json(product);
+  } catch (e) {
+    const msg = e instanceof Error && e.message.includes("Unique") ? "Бұл артикул бар тауарда қолданылып жатыр" : "Тауарды сақтау мүмкін емес";
+    return badRequest(msg, 409);
+  }
+}
 
-  return NextResponse.json(product);
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const r = await requirePermission("manageReferenceData");
+  if ("response" in r) return r.response;
+
+  const movementCount = await db.stockMovement.count({ where: { productId: params.id } });
+  if (movementCount > 0) {
+    // Soft delete only — movements stay for history
+    const old = await db.product.findUnique({ where: { id: params.id } });
+    if (!old) return notFound();
+    await db.product.update({ where: { id: params.id }, data: { isActive: false } });
+    await logAudit({ userId: r.session.user.id!, action: "DELETE", entityType: "Product", entityId: params.id, oldValue: { name: old.name } });
+    return NextResponse.json({ ok: true });
+  }
+
+  // No history — hard delete is allowed but we still soft-delete for consistency
+  const old = await db.product.findUnique({ where: { id: params.id } });
+  if (!old) return notFound();
+  await db.product.update({ where: { id: params.id }, data: { isActive: false } });
+  await logAudit({ userId: r.session.user.id!, action: "DELETE", entityType: "Product", entityId: params.id, oldValue: { name: old.name } });
+  return NextResponse.json({ ok: true });
 }

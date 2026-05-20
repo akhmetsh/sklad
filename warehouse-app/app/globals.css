@@ -1,3 +1,63 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Tap targets at least 44px on touch devices */
+  @media (pointer: coarse) {
+    button, a, [role="button"], input[type="submit"], input[type="button"] {
+      min-height: 44px;
+    }
+    input, select, textarea {
+      min-height: 44px;
+      font-size: 16px; /* prevents iOS zoom on focus */
+    }
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgb(203 213 225);
+    border-radius: 3px;
+  }
+}
+
+@media print {
+  /* Hide app chrome (sidebar = aside, topbar = header) and elements marked .no-print */
+  aside, header, .no-print {
+    display: none !important;
+  }
+  /* Reset layout shell so the document fills the page */
+  body, main {
+    background: white !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  /* Always show desktop layouts in print */
+  .md\:hidden { display: none !important; }
+  .hidden.md\:block, .hidden.md\:flex, .hidden.md\:table, .hidden.md\:grid { display: revert !important; }
+  /* Cleaner borders for printed pages */
+  .border, .border-gray-100, .border-gray-200 { border-color: #e5e7eb !important; }
+  /* Avoid splitting table rows or cards */
+  tr, li { page-break-inside: avoid; }
+}

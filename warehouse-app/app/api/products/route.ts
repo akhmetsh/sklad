@@ -1,45 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { productSchema } from "@/lib/validators/product";
 import { logAudit } from "@/lib/audit";
-import { can } from "@/lib/permissions";
-import type { Role } from "@prisma/client";
+import { requireSession, requirePermission, badRequest } from "@/lib/api/helpers";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const r = await requireSession();
+  if ("response" in r) return r.response;
 
   const products = await db.product.findMany({
+    where: { isActive: true },
     include: { category: true, unit: true },
     orderBy: { name: "asc" },
   });
-
   return NextResponse.json(products);
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(session.user.role as Role, "manageReferenceData")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const r = await requirePermission("manageReferenceData");
+  if ("response" in r) return r.response;
+
+  const parsed = productSchema.safeParse(await req.json());
+  if (!parsed.success) return badRequest(parsed.error.errors[0]?.message ?? "Invalid input", 422);
+
+  const data = {
+    name: parsed.data.name,
+    sku: parsed.data.sku,
+    barcode: parsed.data.barcode || null,
+    imageUrl: parsed.data.imageUrl || null,
+    categoryId: parsed.data.categoryId,
+    unitId: parsed.data.unitId,
+    description: parsed.data.description || null,
+    minStock: parsed.data.minStock,
+  };
+
+  try {
+    const product = await db.product.create({ data });
+    await logAudit({ userId: r.session.user.id!, action: "CREATE", entityType: "Product", entityId: product.id, newValue: data });
+    return NextResponse.json(product, { status: 201 });
+  } catch (e) {
+    const msg = e instanceof Error && e.message.includes("Unique") ? "Бұл артикул бар тауарда қолданылып жатыр" : "Тауарды жасау мүмкін емес";
+    return badRequest(msg, 409);
   }
-
-  const body = await req.json();
-  const parsed = productSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
-  }
-
-  const product = await db.product.create({ data: parsed.data });
-
-  await logAudit({
-    userId: session.user.id!,
-    action: "CREATE",
-    entityType: "Product",
-    entityId: product.id,
-    newValue: parsed.data,
-  });
-
-  return NextResponse.json(product, { status: 201 });
 }

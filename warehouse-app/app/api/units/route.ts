@@ -1,33 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { z } from "zod";
 import { logAudit } from "@/lib/audit";
-import { can } from "@/lib/permissions";
-import type { Role } from "@prisma/client";
-
-const schema = z.object({
-  name: z.string().min(1, "Название обязательно"),
-  symbol: z.string().min(1, "Обозначение обязательно"),
-});
+import { unitSchema } from "@/lib/validators/reference";
+import { requireSession, requirePermission, badRequest } from "@/lib/api/helpers";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const units = await db.unit.findMany({ orderBy: { name: "asc" } });
+  const r = await requireSession();
+  if ("response" in r) return r.response;
+
+  const units = await db.unit.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    include: { _count: { select: { products: true } } },
+  });
   return NextResponse.json(units);
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(session.user.role as Role, "manageReferenceData")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const r = await requirePermission("manageReferenceData");
+  if ("response" in r) return r.response;
 
-  const body = await req.json();
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
+  const parsed = unitSchema.safeParse(await req.json());
+  if (!parsed.success) return badRequest(parsed.error.errors[0]?.message ?? "Invalid input", 422);
 
   const unit = await db.unit.create({ data: parsed.data });
-  await logAudit({ userId: session.user.id!, action: "CREATE", entityType: "Unit", entityId: unit.id, newValue: parsed.data });
+  await logAudit({ userId: r.session.user.id!, action: "CREATE", entityType: "Unit", entityId: unit.id, newValue: parsed.data });
   return NextResponse.json(unit, { status: 201 });
 }

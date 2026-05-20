@@ -1,33 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { z } from "zod";
 import { logAudit } from "@/lib/audit";
-import { can } from "@/lib/permissions";
-import type { Role } from "@prisma/client";
-
-const schema = z.object({
-  name: z.string().min(1, "Название обязательно"),
-  description: z.string().optional(),
-});
+import { categorySchema } from "@/lib/validators/reference";
+import { requireSession, requirePermission, badRequest } from "@/lib/api/helpers";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const categories = await db.category.findMany({ orderBy: { name: "asc" } });
+  const r = await requireSession();
+  if ("response" in r) return r.response;
+
+  const categories = await db.category.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    include: { _count: { select: { products: true } } },
+  });
   return NextResponse.json(categories);
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(session.user.role as Role, "manageReferenceData")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const r = await requirePermission("manageReferenceData");
+  if ("response" in r) return r.response;
 
-  const body = await req.json();
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
+  const parsed = categorySchema.safeParse(await req.json());
+  if (!parsed.success) return badRequest(parsed.error.errors[0]?.message ?? "Invalid input", 422);
 
-  const category = await db.category.create({ data: parsed.data });
-  await logAudit({ userId: session.user.id!, action: "CREATE", entityType: "Category", entityId: category.id, newValue: parsed.data });
+  const data = { name: parsed.data.name, description: parsed.data.description || null };
+  const category = await db.category.create({ data });
+  await logAudit({ userId: r.session.user.id!, action: "CREATE", entityType: "Category", entityId: category.id, newValue: data });
   return NextResponse.json(category, { status: 201 });
 }

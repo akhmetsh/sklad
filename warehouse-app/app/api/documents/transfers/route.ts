@@ -1,27 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { transferDocumentSchema } from "@/lib/validators/document";
 import { createTransferDocument } from "@/lib/services/transfer.service";
-import { can } from "@/lib/permissions";
-import type { Role } from "@prisma/client";
+import { DocumentError } from "@/lib/services/errors";
+import { requirePermission, badRequest } from "@/lib/api/helpers";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(session.user.role as Role, "createDocuments")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const r = await requirePermission("createDocuments");
+  if ("response" in r) return r.response;
 
-  const body = await req.json();
-  const parsed = transferDocumentSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
-  }
+  const parsed = transferDocumentSchema.safeParse(await req.json());
+  if (!parsed.success) return badRequest(parsed.error.errors[0]?.message ?? "Invalid input", 422);
 
   try {
-    const doc = await createTransferDocument(parsed.data, session.user.id!);
+    const doc = await createTransferDocument(parsed.data, r.session.user.id!);
     return NextResponse.json(doc, { status: 201 });
-  } catch (e: unknown) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+  } catch (e) {
+    if (e instanceof DocumentError) return badRequest(e.message, e.status);
+    return badRequest("Құжатты жасау мүмкін емес", 500);
   }
 }

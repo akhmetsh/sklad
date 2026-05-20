@@ -1,30 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { z } from "zod";
 import { logAudit } from "@/lib/audit";
-import { can } from "@/lib/permissions";
-import type { Role } from "@prisma/client";
+import { supplierSchema } from "@/lib/validators/reference";
+import { requireSession, requirePermission, badRequest } from "@/lib/api/helpers";
 
-const schema = z.object({
-  name: z.string().min(1, "Название обязательно"),
-  contactPerson: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.string().email().optional().or(z.literal("")),
-  address: z.string().optional(),
-  description: z.string().optional(),
-});
+export async function GET() {
+  const r = await requireSession();
+  if ("response" in r) return r.response;
+
+  const suppliers = await db.supplier.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    include: { _count: { select: { receipts: true } } },
+  });
+  return NextResponse.json(suppliers);
+}
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(session.user.role as Role, "manageReferenceData")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const r = await requirePermission("manageReferenceData");
+  if ("response" in r) return r.response;
 
-  const body = await req.json();
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
+  const parsed = supplierSchema.safeParse(await req.json());
+  if (!parsed.success) return badRequest(parsed.error.errors[0]?.message ?? "Invalid input", 422);
 
-  const supplier = await db.supplier.create({ data: parsed.data });
-  await logAudit({ userId: session.user.id!, action: "CREATE", entityType: "Supplier", entityId: supplier.id, newValue: parsed.data });
+  const data = {
+    name: parsed.data.name,
+    contactPerson: parsed.data.contactPerson || null,
+    phone: parsed.data.phone || null,
+    email: parsed.data.email || null,
+    address: parsed.data.address || null,
+    description: parsed.data.description || null,
+  };
+  const supplier = await db.supplier.create({ data });
+  await logAudit({ userId: r.session.user.id!, action: "CREATE", entityType: "Supplier", entityId: supplier.id, newValue: data });
   return NextResponse.json(supplier, { status: 201 });
 }

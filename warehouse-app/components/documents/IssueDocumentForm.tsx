@@ -1,133 +1,179 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Plus, X } from "lucide-react";
 import { issueDocumentSchema, type IssueDocumentInput } from "@/lib/validators/document";
+import { Button } from "@/components/ui/Button";
+import { Input, Select } from "@/components/ui/Input";
+import { FormField } from "@/components/ui/FormField";
+import { useToast } from "@/components/ui/Toast";
+import { ScanProductButton } from "@/components/documents/ScanProductButton";
+import { todayISO } from "@/lib/format";
+import { t } from "@/lib/i18n";
+
+interface StockEntry { productId: string; warehouseId: string; storageLocationId: string; quantity: number; }
 
 interface Props {
   warehouses: { id: string; name: string }[];
-  products: { id: string; name: string; unit: { symbol: string } }[];
+  products: { id: string; name: string; sku: string; unit: { symbol: string } }[];
   locations: { id: string; name: string; code: string; warehouseId: string }[];
+  stock: StockEntry[];
 }
 
-export function IssueDocumentForm({ warehouses, products, locations }: Props) {
+export function IssueDocumentForm({ warehouses, products, locations, stock }: Props) {
   const router = useRouter();
-  const { register, handleSubmit, watch, control, formState: { errors, isSubmitting } } = useForm<IssueDocumentInput>({
+  const toast = useToast();
+
+  const { register, handleSubmit, control, setValue, formState: { errors, isSubmitting } } = useForm<IssueDocumentInput>({
     resolver: zodResolver(issueDocumentSchema),
     defaultValues: {
-      date: new Date().toISOString().split("T")[0] as unknown as Date,
+      date: todayISO() as unknown as Date,
       items: [{ productId: "", storageLocationId: "", quantity: 1 }],
     },
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
-  const selectedWarehouseId = watch("warehouseId");
-  const filteredLocations = locations.filter((l) => l.warehouseId === selectedWarehouseId);
+  const warehouseId = useWatch({ control, name: "warehouseId" });
+  const items = useWatch({ control, name: "items" });
+
+  const filteredLocations = locations.filter((l) => l.warehouseId === warehouseId);
+
+  function availableFor(productId: string, locationId: string): number | null {
+    if (!warehouseId || !productId || !locationId) return null;
+    const entry = stock.find(
+      (s) => s.productId === productId && s.warehouseId === warehouseId && s.storageLocationId === locationId,
+    );
+    return entry?.quantity ?? 0;
+  }
 
   async function onSubmit(data: IssueDocumentInput) {
-    const res = await fetch("/api/documents/issues", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      alert(err.error ?? "Ошибка создания документа");
-      return;
+    try {
+      const res = await fetch("/api/documents/issues", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast.error(typeof body.error === "string" ? body.error : t.errors.generic);
+        return;
+      }
+      const doc = await res.json();
+      toast.success(t.documents.issues.created);
+      router.push(`/documents/issues/${doc.id}`);
+      router.refresh();
+    } catch {
+      toast.error(t.errors.network);
     }
-
-    const doc = await res.json();
-    router.push(`/documents/issues/${doc.id}`);
-    router.refresh();
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      <div className="bg-white border border-gray-200 rounded-lg p-6 grid grid-cols-2 gap-4">
-        <Field label="Склад *" error={(errors as { warehouseId?: { message?: string } }).warehouseId?.message}>
-          <select {...register("warehouseId")} className={inp}>
-            <option value="">— выберите —</option>
-            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Получатель *" error={(errors as { recipientName?: { message?: string } }).recipientName?.message}>
-          <input {...register("recipientName")} className={inp} placeholder="ФИО или наименование" />
-        </Field>
-        <Field label="Дата *">
-          <input type="date" {...register("date")} className={inp} />
-        </Field>
-        <Field label="Комментарий" className="col-span-2">
-          <input {...register("comment")} className={inp} />
-        </Field>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {/* Header */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">{t.documents.common.requisites}</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormField label={t.documents.common.warehouse} required error={errors.warehouseId?.message}>
+            <Select {...register("warehouseId")} error={!!errors.warehouseId}>
+              <option value="">{t.common.select}</option>
+              {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </Select>
+          </FormField>
+          <FormField label={t.documents.issues.fields.recipient} required error={errors.recipientName?.message}>
+            <Input {...register("recipientName")} error={!!errors.recipientName} placeholder={t.documents.issues.fields.recipientPlaceholder} />
+          </FormField>
+          <FormField label={t.documents.common.date} required error={errors.date?.message as string | undefined}>
+            <Input type="date" {...register("date")} error={!!errors.date} />
+          </FormField>
+          <FormField label={t.documents.common.comment}>
+            <Input {...register("comment")} />
+          </FormField>
+        </div>
       </div>
 
+      {/* Items */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-          <span className="font-medium text-sm">Позиции документа</span>
-          <button type="button" onClick={() => append({ productId: "", storageLocationId: "", quantity: 1 })} className="text-blue-600 text-sm hover:underline">
-            + Добавить строку
+        <div className="px-4 sm:px-6 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-700">{t.documents.common.items}</h2>
+          <button
+            type="button"
+            onClick={() => append({ productId: "", storageLocationId: "", quantity: 1 })}
+            className="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700 text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" /> {t.documents.common.addRow}
           </button>
         </div>
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium text-gray-500">Товар</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-500">Место хранения</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-500">Кол-во</th>
-              <th className="px-3 py-2 w-8" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {fields.map((field, i) => (
-              <tr key={field.id}>
-                <td className="px-3 py-2">
-                  <select {...register(`items.${i}.productId`)} className={inp}>
-                    <option value="">— товар —</option>
-                    {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </td>
-                <td className="px-3 py-2">
-                  <select {...register(`items.${i}.storageLocationId`)} className={inp} disabled={!selectedWarehouseId}>
-                    <option value="">— место —</option>
-                    {filteredLocations.map((l) => <option key={l.id} value={l.id}>{l.code} — {l.name}</option>)}
-                  </select>
-                </td>
-                <td className="px-3 py-2">
-                  <input type="number" step="0.001" min="0.001" {...register(`items.${i}.quantity`)} className={`${inp} text-right w-28`} />
-                </td>
-                <td className="px-3 py-2 text-center">
-                  {fields.length > 1 && (
-                    <button type="button" onClick={() => remove(i)} className="text-red-500 hover:text-red-700 text-xs">✕</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+        {errors.items?.message && (
+          <div className="px-4 sm:px-6 py-2 text-sm text-red-600 border-b border-red-100 bg-red-50">{errors.items.message}</div>
+        )}
+
+        <div className="divide-y divide-gray-100">
+          {fields.map((field, i) => {
+            const itemErrors = errors.items?.[i];
+            const row = items?.[i];
+            const available = availableFor(row?.productId ?? "", row?.storageLocationId ?? "");
+            const required = Number(row?.quantity) || 0;
+            const insufficient = available !== null && required > available;
+            return (
+              <div key={field.id} className="p-3 sm:p-4 space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 sm:items-start">
+                  <div className="sm:col-span-5">
+                    <label className="sm:hidden text-xs font-medium text-gray-500 mb-1 block">{t.documents.common.product}</label>
+                    <div className="flex gap-1">
+                      <Select {...register(`items.${i}.productId`)} error={!!itemErrors?.productId}>
+                        <option value="">{t.common.select}</option>
+                        {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
+                      </Select>
+                      <ScanProductButton onProductFound={(id) => setValue(`items.${i}.productId`, id, { shouldDirty: true, shouldValidate: true })} />
+                    </div>
+                  </div>
+                  <div className="sm:col-span-4">
+                    <label className="sm:hidden text-xs font-medium text-gray-500 mb-1 block">{t.documents.common.location}</label>
+                    <Select {...register(`items.${i}.storageLocationId`)} error={!!itemErrors?.storageLocationId} disabled={!warehouseId}>
+                      <option value="">{warehouseId ? t.common.select : t.documents.common.warehouse}</option>
+                      {filteredLocations.map((l) => <option key={l.id} value={l.id}>{l.code} — {l.name}</option>)}
+                    </Select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="sm:hidden text-xs font-medium text-gray-500 mb-1 block">{t.common.quantity}</label>
+                    <Input
+                      type="number" step="0.001" min="0.001"
+                      {...register(`items.${i}.quantity`)}
+                      error={!!itemErrors?.quantity || insufficient}
+                      className="text-right tabular-nums"
+                      inputMode="decimal"
+                    />
+                  </div>
+                  <div className="sm:col-span-1 flex justify-end items-start">
+                    {fields.length > 1 && (
+                      <button type="button" onClick={() => remove(i)} className="p-2 text-gray-400 hover:text-red-600" aria-label={t.common.delete}>
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {available !== null && (
+                  <p className={`text-xs ${insufficient ? "text-red-600 font-medium" : "text-gray-500"}`}>
+                    {insufficient ? `⚠ ${t.documents.common.insufficient} — ${t.documents.common.available}: ${available}` : `${t.documents.common.available}: ${available}`}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="flex gap-3">
-        <button type="submit" disabled={isSubmitting} className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-60">
-          {isSubmitting ? "Сохранение..." : "Сохранить черновик"}
-        </button>
-        <button type="button" onClick={() => router.back()} className="px-5 py-2 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50">
-          Отмена
-        </button>
+      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={() => router.back()} disabled={isSubmitting}>
+          {t.common.cancel}
+        </Button>
+        <Button type="submit" loading={isSubmitting}>
+          {t.documents.common.createDraft}
+        </Button>
       </div>
     </form>
-  );
-}
-
-const inp = "w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500";
-
-function Field({ label, error, children, className }: { label: string; error?: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={className}>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      {children}
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
-    </div>
   );
 }
