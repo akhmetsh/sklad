@@ -10,7 +10,14 @@ interface BarcodeProps {
   className?: string;
 }
 
-export function Barcode({ value, type = "code128", height = 12, scale = 2, showText = true, className }: BarcodeProps) {
+export function Barcode({
+  value,
+  type = "code128",
+  height = 12,
+  scale = 2,
+  showText = true,
+  className,
+}: BarcodeProps) {
   if (!value) return null;
 
   let svg = "";
@@ -27,8 +34,24 @@ export function Barcode({ value, type = "code128", height = 12, scale = 2, showT
       paddingheight: 5,
       backgroundcolor: "ffffff",
     });
-  } catch {
-    return <div className="text-xs text-red-500">Barcode error: {value}</div>;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[Barcode] toSVG threw for value:", value, msg);
+    return (
+      <div className="text-xs text-red-600 font-mono py-2">
+        ⚠ Barcode render error: {msg} (value: {value})
+      </div>
+    );
+  }
+
+  if (!svg) {
+    // Silent failure — surface it visibly + log to server
+    console.error("[Barcode] toSVG returned empty string for value:", value);
+    return (
+      <div className="text-xs text-amber-600 font-mono py-2">
+        ⚠ Barcode could not be rendered. Value: <span className="font-bold">{value}</span>
+      </div>
+    );
   }
 
   return (
