@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Menu, LogOut, User as UserIcon, Search } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -15,9 +16,18 @@ interface TopbarProps {
 }
 
 export function Topbar({ userName, userRole, onMenuClick, onSearchClick }: TopbarProps) {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [isMac, setIsMac] = useState(false);
+
+  async function handleSignOut() {
+    // Pass redirect:false so Auth.js doesn't resolve callbackUrl against NEXTAUTH_URL
+    // (which would force a fixed port in dev). We handle the navigation ourselves.
+    await signOut({ redirect: false });
+    router.push("/login");
+    router.refresh();
+  }
 
   useEffect(() => {
     setIsMac(typeof navigator !== "undefined" && /Mac|iPhone|iPod|iPad/.test(navigator.platform));
@@ -82,7 +92,7 @@ export function Topbar({ userName, userRole, onMenuClick, onSearchClick }: Topba
               <RoleBadge role={userRole} />
             </div>
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={handleSignOut}
               className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
             >
               <LogOut className="w-4 h-4" />
