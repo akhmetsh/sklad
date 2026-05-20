@@ -117,7 +117,6 @@ model Product {
   name        String
   sku         String   @unique
   barcode     String?
-  imageUrl    String?
   categoryId  String
   unitId      String
   description String?

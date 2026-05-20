@@ -1,13 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { productSchema, type ProductInput } from "@/lib/validators/product";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import { FormField } from "@/components/ui/FormField";
-import { ImagePicker } from "@/components/ui/ImagePicker";
 import { useToast } from "@/components/ui/Toast";
 import { t } from "@/lib/i18n";
 
@@ -19,7 +18,6 @@ interface Props {
     name: string;
     sku: string;
     barcode: string | null;
-    imageUrl: string | null;
     categoryId: string;
     unitId: string;
     description: string | null;
@@ -32,20 +30,19 @@ export function ProductForm({ categories, units, product }: Props) {
   const toast = useToast();
   const isEdit = !!product;
 
-  const { register, handleSubmit, control, formState: { errors, isSubmitting } } = useForm<ProductInput>({
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ProductInput>({
     resolver: zodResolver(productSchema),
     defaultValues: product
       ? {
           name: product.name,
           sku: product.sku,
           barcode: product.barcode ?? "",
-          imageUrl: product.imageUrl ?? "",
           categoryId: product.categoryId,
           unitId: product.unitId,
           description: product.description ?? "",
           minStock: parseFloat(product.minStock.toString()),
         }
-      : { minStock: 0, barcode: "", imageUrl: "", description: "" },
+      : { minStock: 0, barcode: "", description: "" },
   });
 
   async function onSubmit(data: ProductInput) {
@@ -73,17 +70,7 @@ export function ProductForm({ categories, units, product }: Props) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 space-y-4">
-      <FormField label={t.products.image}>
-        <Controller
-          control={control}
-          name="imageUrl"
-          render={({ field }) => (
-            <ImagePicker value={field.value ?? ""} onChange={field.onChange} />
-          )}
-        />
-      </FormField>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <FormField label={t.products.fields.name} required error={errors.name?.message}>
           <Input {...register("name")} error={!!errors.name} autoFocus />
         </FormField>

@@ -212,7 +212,6 @@ Added in this slice:
 - [x] Optional barcode field
 - [x] Soft-delete from list view with `ConfirmDialog`
 - [ ] Server-side pagination (deferred to Phase 2)
-- [ ] Image upload (Phase 2)
 
 Added in this slice:
 - `lib/validators/product.ts` rewritten with Kazakh `t.validation.*` messages
@@ -320,8 +319,8 @@ Added in this slice:
 - Two new dict keys in i18n: `common.dateFrom/dateTo`, `movements.*`, `cancel.*`, `products.movementHistory/viewHistory`
 
 #### 2.2 Product enhancements ✓ DONE
-- [x] **Image upload** — `imageUrl` field added (migration `add_product_image_url`); upload route `/api/upload/product-image` accepts multipart with size/MIME validation (≤ 4 MB, jpg/png/webp), writes to `public/uploads/products/{timestamp}-{random}.{ext}`, returns the URL. Form uses `ImagePicker` component wired via react-hook-form `Controller`. Product list shows 36×36 thumbnail. `.gitignore` excludes uploaded files.
 - [x] **Barcode generation** — `bwip-js` (Node SVG output, no canvas dependency). `Barcode` component renders inline SVG with Code-128 default + EAN-13 option, configurable scale/height. Product detail page shows a rendered barcode panel when the product has a barcode; visible in print view too.
+- [ ] ~~Image upload~~ — added in an earlier iteration; later removed (filesystem isn't compatible with Vercel/Render free tiers, and feature isn't required by the project scope). Migration `remove_product_image_url` cleans up the column.
 - [ ] Product variants — out of scope
 
 #### 2.3 Search & data density ✓ PARTIAL

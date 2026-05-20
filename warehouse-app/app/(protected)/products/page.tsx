@@ -24,7 +24,6 @@ export default async function ProductsPage() {
         name: p.name,
         sku: p.sku,
         barcode: p.barcode,
-        imageUrl: p.imageUrl,
         categoryId: p.categoryId,
         categoryName: p.category.name,
         unitId: p.unitId,

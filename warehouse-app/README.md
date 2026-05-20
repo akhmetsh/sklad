@@ -162,7 +162,6 @@ warehouse-app/
 │   ├── api/                  ← REST-style Route Handlers
 │   │   ├── auth/[...nextauth]/
 │   │   ├── search/           ← Cmd+K global search
-│   │   ├── upload/product-image/
 │   │   ├── {entity}/         ← GET, POST
 │   │   ├── {entity}/[id]/    ← PATCH, DELETE
 │   │   └── documents/{type}/[id]/{confirm,cancel}/
@@ -173,7 +172,7 @@ warehouse-app/
 │
 ├── components/
 │   ├── layout/               ← Sidebar (mobile drawer), Topbar (hamburger + Cmd+K), PageHeader, CommandPalette
-│   ├── ui/                   ← Button, Input, Select, FormField, Sheet, ConfirmDialog, Toast, DataTable, Badge variants, EmptyState, Skeleton, Barcode, ImagePicker
+│   ├── ui/                   ← Button, Input, Select, FormField, Sheet, ConfirmDialog, Toast, DataTable, Badge variants, EmptyState, Skeleton, Barcode, BarcodeScanner
 │   ├── forms/                ← LoginForm, ProductForm, UserCreateForm
 │   └── documents/            ← ReceiptDocumentForm, IssueDocumentForm, TransferDocumentForm, ConfirmDocumentButton, CancelDocumentButton, PrintButton
 │
@@ -191,12 +190,10 @@ warehouse-app/
 │   ├── csv.ts                    ← toCSV + downloadCSV
 │   └── cn.ts                     ← clsx + tailwind-merge
 │
-├── prisma/
-│   ├── schema.prisma             ← all entity definitions
-│   ├── seed.ts                   ← realistic test data
-│   └── migrations/
-│
-└── public/uploads/products/      ← user-uploaded product images
+└── prisma/
+    ├── schema.prisma             ← all entity definitions
+    ├── seed.ts                   ← realistic test data
+    └── migrations/
 ```
 
 ---
@@ -224,7 +221,6 @@ warehouse-app/
 - **Cmd+K / Ctrl+K** global command palette: search across products (name/SKU/barcode), all document types, users; offers quick actions when empty
 - **Barcode generation** (Code-128) on product detail page
 - **Barcode scanning** via device camera on document forms (look up product by barcode)
-- **Image upload** per product, 4 MB limit, JPEG/PNG/WEBP
 - **Soft delete** for reference data; block delete when entity is referenced
 - **Date range filters** on document lists
 
@@ -261,7 +257,7 @@ The project was built in phases — see [`IMPLEMENTATION-PLAN.md`](IMPLEMENTATIO
 
 - **Phase 0** — i18n + responsive layout primitives + UI design system
 - **Phase 1** — MVP: auth, reference data, products, documents, stock, reports, users, audit, dashboard
-- **Phase 2** — operational polish: movement history, cancel docs, print, CSV, date filters, image upload, barcode generation, Cmd+K search
+- **Phase 2** — operational polish: movement history, cancel docs, print, CSV, date filters, barcode generation, Cmd+K search
 - **Phase 3** — advanced (barcode scanning, write-offs, inventory sessions — partial)
 - **Phase 4** — production hardening (tests, CI, deployment)
 

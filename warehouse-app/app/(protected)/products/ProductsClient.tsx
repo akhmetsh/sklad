@@ -17,7 +17,6 @@ import { t } from "@/lib/i18n";
 
 interface Product {
   id: string; name: string; sku: string; barcode: string | null;
-  imageUrl: string | null;
   categoryId: string; categoryName: string;
   unitId: string; unitSymbol: string;
   minStock: number; stockTotal: number;
@@ -65,17 +64,9 @@ export function ProductsClient({ initial, categories }: { initial: Product[]; ca
     {
       key: "name", header: t.products.fields.name, mobilePrimary: true,
       cell: (p) => (
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-md border border-gray-200 bg-gray-50 overflow-hidden flex-shrink-0">
-            {p.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
-            ) : null}
-          </div>
-          <Link href={`/products/${p.id}`} className="font-medium text-gray-900 hover:text-brand-600 hover:underline truncate">
-            {p.name}
-          </Link>
-        </div>
+        <Link href={`/products/${p.id}`} className="font-medium text-gray-900 hover:text-brand-600 hover:underline">
+          {p.name}
+        </Link>
       ),
     },
     { key: "sku", header: t.products.fields.sku, cell: (p) => <span className="font-mono text-gray-600 text-xs">{p.sku}</span> },

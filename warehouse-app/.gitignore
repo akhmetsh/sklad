@@ -14,10 +14,6 @@ out/
 prisma/*.db
 prisma/*.db-journal
 
-# Uploaded user files
-public/uploads/products/*
-!public/uploads/products/.gitkeep
-
 # Misc
 .DS_Store
 *.pem

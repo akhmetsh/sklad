@@ -27,7 +27,6 @@ export async function POST(req: NextRequest) {
     name: parsed.data.name,
     sku: parsed.data.sku,
     barcode: parsed.data.barcode || null,
-    imageUrl: parsed.data.imageUrl || null,
     categoryId: parsed.data.categoryId,
     unitId: parsed.data.unitId,
     description: parsed.data.description || null,
