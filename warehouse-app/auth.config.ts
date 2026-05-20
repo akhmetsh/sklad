@@ -1,6 +1,10 @@
 import type { NextAuthConfig } from "next-auth";
 
 export const authConfig: NextAuthConfig = {
+  // Trust the Host header (we sit behind Render/Vercel/nginx, which terminate TLS
+  // and forward via X-Forwarded-* headers). Without this, Auth.js v5 refuses to
+  // construct URLs from request headers and throws UntrustedHost.
+  trustHost: true,
   pages: {
     signIn: "/login",
   },
