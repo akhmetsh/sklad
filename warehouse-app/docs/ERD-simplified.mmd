@@ -1,0 +1,84 @@
+%%{init: {"theme":"default", "themeVariables":{"primaryColor":"#dbeafe","primaryTextColor":"#1e3a8a","primaryBorderColor":"#1d4ed8","lineColor":"#475569","fontSize":"15px"}}}%%
+erDiagram
+    User {
+        string email UK
+        string name
+        Role role
+    }
+
+    Category {
+        string name UK
+    }
+
+    Unit {
+        string symbol UK
+        string name
+    }
+
+    Supplier {
+        string name
+        string phone
+        string email
+    }
+
+    Warehouse {
+        string name UK
+        string address
+    }
+
+    StorageLocation {
+        string code
+        string name
+    }
+
+    Product {
+        string sku UK
+        string name
+        string barcode
+        decimal minStock
+    }
+
+    ReceiptDocument {
+        string documentNumber UK
+        date date
+        DocumentStatus status
+    }
+
+    IssueDocument {
+        string documentNumber UK
+        string recipientName
+        date date
+        DocumentStatus status
+    }
+
+    TransferDocument {
+        string documentNumber UK
+        date date
+        DocumentStatus status
+    }
+
+    StockMovement {
+        MovementType type
+        decimal quantityChange
+    }
+
+    Warehouse ||--o{ StorageLocation : "has"
+    Category ||--o{ Product : ""
+    Unit ||--o{ Product : ""
+
+    Supplier ||--o{ ReceiptDocument : ""
+    User ||--o{ ReceiptDocument : "creates"
+    User ||--o{ IssueDocument : "creates"
+    User ||--o{ TransferDocument : "creates"
+
+    Warehouse ||--o{ ReceiptDocument : "to"
+    Warehouse ||--o{ IssueDocument : "from"
+    Warehouse ||--o{ TransferDocument : "from/to"
+
+    Product ||--o{ StockMovement : ""
+    Warehouse ||--o{ StockMovement : ""
+    StorageLocation ||--o{ StockMovement : ""
+
+    ReceiptDocument ||--o{ StockMovement : "produces"
+    IssueDocument ||--o{ StockMovement : "produces"
+    TransferDocument ||--o{ StockMovement : "produces"
