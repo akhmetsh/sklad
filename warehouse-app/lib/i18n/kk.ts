@@ -232,7 +232,7 @@ export const kk = {
       comment: "Түсініктеме",
       requisites: "Реквизиттер",
       items: "Тауарлы позициялар",
-      addRow: "+ Жол қосу",
+      addRow: "Жол қосу",
       product: "Тауар",
       location: "Сақтау орны",
       available: "Қолжетімді",

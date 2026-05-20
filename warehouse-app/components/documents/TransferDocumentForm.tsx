@@ -113,6 +113,15 @@ export function TransferDocumentForm({ warehouses, products, locations, stock }:
           <div className="px-4 sm:px-6 py-2 text-sm text-red-600 border-b border-red-100 bg-red-50">{errors.items.message}</div>
         )}
 
+        {/* Column headers — visible only on desktop */}
+        <div className="hidden sm:grid sm:grid-cols-12 gap-3 px-4 sm:px-6 py-2 border-b border-gray-100 bg-gray-50 text-xs font-medium uppercase tracking-wider text-gray-500">
+          <div className="sm:col-span-4">{t.documents.common.product}</div>
+          <div className="sm:col-span-3">{t.documents.transfers.fields.fromLocation}</div>
+          <div className="sm:col-span-1" />
+          <div className="sm:col-span-3">{t.documents.transfers.fields.toLocation}</div>
+          <div className="sm:col-span-1 text-right">{t.common.quantity}</div>
+        </div>
+
         <div className="divide-y divide-gray-100">
           {fields.map((field, i) => {
             const itemErrors = errors.items?.[i];

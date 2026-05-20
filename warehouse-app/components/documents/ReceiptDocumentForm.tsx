@@ -112,6 +112,15 @@ export function ReceiptDocumentForm({ suppliers, warehouses, products, locations
           </div>
         )}
 
+        {/* Column headers — visible only on desktop */}
+        <div className="hidden sm:grid sm:grid-cols-12 gap-3 px-4 sm:px-6 py-2 border-b border-gray-100 bg-gray-50 text-xs font-medium uppercase tracking-wider text-gray-500">
+          <div className="sm:col-span-4">{t.documents.common.product}</div>
+          <div className="sm:col-span-3">{t.documents.common.location}</div>
+          <div className="sm:col-span-2 text-right">{t.common.quantity}</div>
+          <div className="sm:col-span-2 text-right">{t.documents.receipts.fields.unitPrice}</div>
+          <div className="sm:col-span-1" />
+        </div>
+
         <div className="divide-y divide-gray-100">
           {fields.map((field, i) => {
             const itemErrors = errors.items?.[i];
